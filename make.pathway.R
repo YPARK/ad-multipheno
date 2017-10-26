@@ -38,21 +38,27 @@ mwas.sig <- mwas.boot.tab %>%
     filter(p.val < cutoff)
 
 ################################################################
-take.gsa <- function(gsc.file, .pheno, n.perm = 5e4, dist.cutoff = 1e4) {
+take.gsa <- function(gsc.file, .pheno, n.perm = 5e4, dist.cutoff = 1e4, full.list = FALSE) {
 
     gsc <- loadGSC(gsc.file)
 
-    sig.cg <- mwas.sig %>%
-        dplyr::select(cg) %>% unique()
+    if(full.list) {
+        gene.tab <- mwas.tab %>%
+            filter(pheno == .pheno)
+    } else {
+        sig.cg <- mwas.sig %>%
+            dplyr::select(cg) %>% unique()
+        gene.tab <- mwas.tab %>%
+            filter(pheno == .pheno, cg %in% sig.cg$cg)
+    }
 
-    gene.tab <- mwas.tab %>%
-        filter(pheno == .pheno, cg %in% sig.cg$cg) %>%
-            left_join(cpg2gene %>% dplyr::filter(dist < dist.cutoff), by = 'cg') %>%
-                na.omit() %>%
-                    group_by(hgnc) %>%
-                        slice(which.max(lodds)) %>%
-                            mutate(z = theta / (theta.se + 1e-4)) %>%
-                                filter(is.finite(z))
+    gene.tab <- gene.tab %>%
+        left_join(cpg2gene %>% dplyr::filter(dist < dist.cutoff), by = 'cg') %>%
+            na.omit() %>%
+                group_by(hgnc) %>%
+                    slice(which.max(lodds)) %>%
+                        mutate(z = theta / (theta.se + 1e-4)) %>%
+                            filter(is.finite(z))
 
     gsc.stat <- gene.tab$z
     names(gsc.stat) <- gene.tab$hgnc
@@ -69,7 +75,7 @@ take.gsa <- function(gsc.file, .pheno, n.perm = 5e4, dist.cutoff = 1e4) {
                           pheno = .pheno) %>%
                               dplyr::mutate(gs = sapply(as.character(gs), rm.header)) %>%
                                   arrange(p.val.up)
-    
+
     return(gsa.tab)
 }
 
@@ -86,7 +92,7 @@ take.pair.gsa <- function(gsc.file, pheno.pair, n.perm = 5e4, dist.cutoff = 1e4)
             dplyr::filter(pheno %in% pheno.pair) %>%
                 dplyr::select(cg, pheno, lodds) %>%
                     left_join(cpg2gene %>% dplyr::filter(dist < dist.cutoff), by = 'cg') %>%
-                        dplyr::group_by(hgnc, pheno) %>%                            
+                        dplyr::group_by(hgnc, pheno) %>%
                             dplyr::summarize(lodds = max(lodds)) %>%
                                 tidyr::spread(key = 'pheno', value = 'lodds') %>%
                                     na.omit()
@@ -96,7 +102,7 @@ take.pair.gsa <- function(gsc.file, pheno.pair, n.perm = 5e4, dist.cutoff = 1e4)
     names(gsc.stat) <- gene.pair.tab$hgnc
 
     gsa <- runGSA(geneLevelStats = gsc.stat, gsc = gsc, geneSetStat = 'median',
-                  nPerm = n.perm, gsSizeLim = c(10, 500), verbose = TRUE)              
+                  nPerm = n.perm, gsSizeLim = c(10, 500), verbose = TRUE)
 
     .tab <- GSAsummaryTable(gsa, save = FALSE)
 
@@ -137,7 +143,21 @@ for(.pheno in pheno.names) {
         gsa.tab <- take.gsa(gsc.file, .pheno, n.perm = 5e4, dist.cutoff = 1e4)
         .write.tab(gsa.tab, path = gzfile(out.file))
     }
-}    
+
+    gsc.file <- 'genesets/c2.cp.kegg.v6.0.symbols.gmt'
+    out.file <- 'pathway/' %&&% 'full-KEGG_' %&&% .pheno %&&% '.txt.gz'
+    if(!file.exists(out.file)) {
+        gsa.tab <- take.gsa(gsc.file, .pheno, n.perm = 5e4, dist.cutoff = 1e4, full.list = TRUE)
+        .write.tab(gsa.tab, path = gzfile(out.file))
+    }
+
+    gsc.file <- 'genesets/c2.cp.reactome.v6.0.symbols.gmt'
+    out.file <- 'pathway/' %&&% 'full-REACTOME_' %&&% .pheno %&&% '.txt.gz'
+    if(!file.exists(out.file)) {
+        gsa.tab <- take.gsa(gsc.file, .pheno, n.perm = 5e4, dist.cutoff = 1e4, full.list = TRUE)
+        .write.tab(gsa.tab, path = gzfile(out.file))
+    }
+}
 
 for(.p1 in pheno.names) {
     for(.p2 in pheno.names) {
@@ -162,4 +182,3 @@ for(.p1 in pheno.names) {
         }
     }
 }
-
