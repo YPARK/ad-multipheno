@@ -1,5 +1,6 @@
 all: table_mwas_significant.xlsx \
-  nearest.genes.gz
+  nearest.genes.gz \
+  table_replication_formatted.xlsx
 
 
 ## 1. assign genes by mediation analysis
@@ -19,6 +20,13 @@ temp/coding.genes.bed.gz: coding.genes.txt.gz
 	[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	cat $< | gzip -d | awk -F'\t' '{ print $$1 FS $$2 FS $$3 FS $$5 FS $$4 FS $$6 }' | sort -k1,1 -k2,2n | gzip > $@
 
+
+## 3. take nicely replicated CpGs
+table_top_cpgs.md: table_replication_formatted.xlsx
+table_replication.xlsx: table_replication_formatted.xlsx
+figure-replication/fig_dejager.pdf: table_replication_formatted.xlsx
+table_replication_formatted.xlsx: make.table-replication.R table_mwas.txt.gz nearest.genes.gz dejager.cpgs.txt
+	Rscript --vanilla $<
 
 ## convert large rdata to easily loadable feather format
 table_mwas.ft: make.feather.R
