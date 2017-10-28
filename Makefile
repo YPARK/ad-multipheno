@@ -1,11 +1,12 @@
 all: table_mwas_significant.xlsx \
   nearest.genes.gz \
   table_replication_formatted.xlsx \
-  table_replication_pve.xlsx
+  table_replication_pve.xlsx \
+  table_pve.txt.gz
 
 
 ## 1. assign genes by mediation analysis
-table_mwas_significant.xlsx: make.mwas-genes.R m2t.txt.gz table_bootstrap.ft table_mwas.ft
+table_mwas_significant.xlsx: make.mwas-genes.R
 	Rscript --vanilla $<
 
 table_mwas.txt.gz: table_mwas_significant.xlsx
@@ -32,10 +33,15 @@ table_replication_formatted.xlsx: make.table-replication.R table_mwas.txt.gz nea
 
 
 ## 4. Proportion of variance explained
-figure-replication/fig_pve_stat_heatmap.pdf: table_replication_pve.xlsx
-figure-replication/fig_pve_stat_tot.pdf: table_replication_pve.xlsx
+figure-replication/fig_replication_pve_stat_heatmap.pdf: table_replication_pve.xlsx
+figure-replication/fig_replication_pve_stat_tot.pdf: table_replication_pve.xlsx
 table_replication_pve.txt.gz: table_replication_pve.xlsx
-table_replication_pve.xlsx: make.table-pve.R table_replication.txt.gz
+table_replication_pve.xlsx: make.table-replication-pve.R table_replication.txt.gz
+	Rscript --vanilla $<
+
+fig_pve_stat_tot.pdf: table_pve.txt.gz
+fig_pve_stat_heatmap.pdf: table_pve.txt.gz
+table_pve.txt.gz: make.table-pve.R table_mwas_significant.txt.gz
 	Rscript --vanilla $<
 
 ## convert large rdata to easily loadable feather format

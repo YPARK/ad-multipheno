@@ -5,7 +5,6 @@ library(xlsx)
 library(dplyr)
 library(tidyr)
 
-repl.tab <- read_tsv('table_replication.txt.gz')
 load('summary-G.rdata')
 
 var.names <- read_tsv('phenotype.names.txt', col_names = 'var')
@@ -23,33 +22,34 @@ pve.stat.tot <- gauss.var.decomp %>%
               pve.sd = sd(pve),
               pve.se = sd(pve) / sqrt(n()))
 
-cg.pheno <- repl.tab %>%
+mwas.sig <- read_tsv('table_mwas_significant.txt.gz')
+
+cg.pheno <- mwas.sig %>%
     select(cg, pheno) %>%
     unique() %>%
     group_by(cg) %>%
-    summarize(pheno = paste(pheno, collapse = '|'))
+    summarize(pheno = paste(sort(pheno, decreasing=TRUE), collapse = '+'))
 
 var.tab <- cg.pheno %>%
-    left_join(gauss.var.decomp, by = 'cg') %>%
-    arrange(chr, cg.loc, pheno)
+    left_join(gauss.var.decomp, by = 'cg')
 
 pve.tab <- var.tab %>%
     select(-chr, -cg.loc, -var.obs) %>%
-    gather(variable, pve, c('genetic', var.names))
+    gather(variable, pve, c('genetic', var.names)) %>%
+    na.omit()
 
 pve.stat <- pve.tab %>% group_by(variable, pheno) %>%
     summarize(pve.mean = mean(pve),
               pve.sd = sd(pve),
-              pve.se = sd(pve) / sqrt(n())) %>%
-    arrange(pheno)
+              pve.se = sd(pve) / sqrt(n()),
+              n = n()) %>%
+    arrange(pheno) %>% filter(n > 1)
 
-pve.stat$variable <- factor(pve.stat$variable,
-                            c(var.names, 'genetic'))
+pve.stat$pheno <- factor(pve.stat$pheno, c('NP', 'NFT', 'Cog', 'NP+NFT', 'NP+Cog', 'NFT+Cog'))
 
-pve.stat.tot$variable <- factor(pve.stat.tot$variable,
-                                c(var.names, 'genetic'))
+pve.stat$variable <- factor(pve.stat$variable, c(var.names, 'genetic'))
 
-pve.stat$pheno <- factor(pve.stat$pheno, c('NP', 'NFT', 'Cog'))
+pve.stat.tot$variable <- factor(pve.stat.tot$variable, c(var.names, 'genetic'))
 
 gg.plot <- function(...) {
     ggplot(...) + theme_bw() + theme(panel.background = element_blank())
@@ -61,38 +61,46 @@ plt.pve.stat <- gg.plot() +
 
 plt.pve.stat <- plt.pve.stat +
     geom_errorbar(data = pve.stat.tot, aes(x = variable,
-                      ymin = pmax(pve.mean - 2 * pve.se, 0),
+                      ymin = pmax(pve.mean - 2 * pve.se, 1e-4),
                       ymax = pmin(pve.mean + 2 * pve.se, 1)),
                   color = '#009900', width = .1)
 
 plt.pve.stat <-
     plt.pve.stat +
     geom_linerange(data = pve.stat, aes(x = variable,
-                      ymin = pve.mean - 2 * pve.se,
-                      ymax = pve.mean + 2 * pve.se)) +
+                      ymin = pmax(pve.mean - 2 * pve.se, 1e-4),
+                      ymax = pmin(pve.mean + 2 * pve.se, 1))) +
     geom_point(data = pve.stat, aes(x = variable, y = pve.mean)) +
-    facet_grid(pheno ~ .) +
+    facet_wrap(~pheno, scales = 'free', nrow = 3, dir = 'v') +
     ylab('proportion of variance explained (DNAme)') +
     theme(axis.text.x = element_text(size=8, angle = 45, hjust = 1, vjust = 1))
 
-pdf('figure-replication/fig_pve_stat_tot.pdf', width = 3, height = 7)
+plt.pve.stat <- 
+    plt.pve.stat +
+    scale_y_continuous(trans = 'sqrt', breaks = c(1e-3, 1e-2, 0.025, 0.05, 0.1, 0.2))
+
+pdf('fig_pve_stat_tot.pdf', width = 5, height = 7)
 print(plt.pve.stat)
 dev.off()
 
 ################################################################
+## show double phenotype stuff
 pve.tab$variable <- factor(pve.tab$variable, c(var.names, 'genetic'))
-pve.tab$pheno <- factor(pve.tab$pheno, c('NP', 'NFT', 'Cog'))
+pve.tab$pheno <- factor(pve.tab$pheno, c('NP', 'NFT', 'Cog', 'NP+NFT', 'NP+Cog', 'NFT+Cog'))
 
-temp <- pve.tab %>% spread(key = variable, value = pve) %>%
+pve.tab.mult <- pve.tab %>% filter(pheno %in% c('NP+NFT', 'NP+Cog', 'NFT+Cog'))
+
+temp <- pve.tab.mult %>% spread(key = variable, value = pve) %>%
     select(-pheno, -total, -MF)
 
 cg.list <- temp$cg
 cg.order <- row.order(temp %>% select(-cg) %>% as.matrix())
 cg.ordered <- cg.list[cg.order]
 
-pve.tab$cg <- factor(pve.tab$cg, cg.ordered)
+pve.tab.mult$cg <- factor(pve.tab.mult$cg, cg.ordered)
 
-plt.pve.heatmap <- gg.plot(pve.tab, aes(y = cg, x = variable, fill = pve)) +
+plt.pve.heatmap <-
+    gg.plot(pve.tab.mult, aes(y = cg, x = variable, fill = pve)) +
     geom_tile() +
     facet_grid(pheno ~ ., scales = 'free', space = 'free') +
     scale_fill_gradientn('PVE',
@@ -100,14 +108,14 @@ plt.pve.heatmap <- gg.plot(pve.tab, aes(y = cg, x = variable, fill = pve)) +
                          breaks = c(0, 0.1, 0.25, 0.5), trans = 'sqrt') +
     theme(legend.position = 'bottom',
           legend.text = element_text(size=6),
-          axis.text.y = element_text(size=4), axis.title = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.title.y = element_blank(),
           axis.text.x = element_text(size=8, angle = 45, hjust = 1, vjust = 1))
 
-pdf('figure-replication/fig_pve_stat_heatmap.pdf', width = 3, height = 7)
+pdf('fig_pve_stat_heatmap.pdf', width = 2.5, height = 7)
 print(plt.pve.heatmap)
 dev.off()
 
 ################################################################
-write.xlsx(pve.tab %>% spread(key = variable, value = pve) %>% as.data.frame(),
-           file = 'table_replication_pve.xlsx', row.names = FALSE)
-write_tsv(pve.tab, path = gzfile('table_replication_pve.txt.gz'))
+write_tsv(pve.tab, path = gzfile('table_pve.txt.gz'))
