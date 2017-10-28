@@ -43,3 +43,12 @@ melt.mwas.tab <- function(data) {
     return(ret)
 }
 
+
+row.order <- function(mat) {
+    require(cba)
+    require(proxy)
+    D <- proxy::dist(mat, method = function(a,b) 1 - cor(a,b, method = 'spearman'))
+    h.out <- hclust(D)
+    o.out <- cba::order.optimal(D, h.out$merge)
+    return(o.out$order)
+}

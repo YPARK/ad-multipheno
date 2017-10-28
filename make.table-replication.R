@@ -86,7 +86,8 @@ write.xlsx(np.out %>% format.tab(), file = 'table_replication_formatted.xlsx', s
 write.xlsx(nft.out %>% format.tab(), file = 'table_replication_formatted.xlsx', sheetName = 'NFT', append = TRUE, row.names = FALSE)
 write.xlsx(cog.out %>% format.tab(), file = 'table_replication_formatted.xlsx', sheetName = 'Cog', append = TRUE, row.names = FALSE)
 
-
+write_tsv(rbind(np.out, nft.out, cog.out),
+          path = gzfile('table_replication.txt.gz'))
 
 ################################################################
 ## just show replication of De Jager CpGs
