@@ -57,13 +57,13 @@ gg.plot <- function(...) {
 
 plt.pve.stat <- gg.plot() +
     geom_bar(data = pve.stat.tot, aes(x = variable, y = pve.mean),
-             fill = '#009900', stat = 'identity')
+             fill = 'gray', stat = 'identity')
 
 plt.pve.stat <- plt.pve.stat +
     geom_errorbar(data = pve.stat.tot, aes(x = variable,
                       ymin = pmax(pve.mean - 2 * pve.se, 1e-4),
                       ymax = pmin(pve.mean + 2 * pve.se, 1)),
-                  color = '#009900', width = .1)
+                  color = 'gray', width = .1)
 
 plt.pve.stat <-
     plt.pve.stat +
