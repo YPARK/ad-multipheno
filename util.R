@@ -52,3 +52,7 @@ row.order <- function(mat) {
     o.out <- cba::order.optimal(D, h.out$merge)
     return(o.out$order)
 }
+
+gg.plot <- function(...) {
+    ggplot(...) + theme_bw() + theme(panel.background = element_blank())
+}

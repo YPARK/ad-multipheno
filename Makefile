@@ -44,6 +44,18 @@ fig_pve_stat_heatmap.pdf: table_pve.txt.gz
 table_pve.txt.gz: make.table-pve.R table_mwas_significant.txt.gz
 	Rscript --vanilla $<
 
+## 5. pathway analysis
+full-REACTOME_NP.txt.gz: full-REACTOME_Cog.txt.gz
+full-REACTOME_NFT.txt.gz: full-REACTOME_Cog.txt.gz
+full-REACTOME_Cog.txt.gz: make.pathway.R
+	Rscript --vanilla $<
+
+fig_pathway_genes.pdf: table_pathways.md
+table_pathways.md: make.table-pathway.R
+	Rscript --vanilla $<
+
+
+
 ## convert large rdata to easily loadable feather format
 table_mwas.ft: make.feather.R
 	Rscript --vanilla $<
