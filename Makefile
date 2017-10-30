@@ -1,18 +1,15 @@
-all: table_mwas_significant.xlsx \
+all: table_mwas.txt.gz \
   nearest.genes.gz \
   table_replication_formatted.xlsx \
   table_replication_pve.xlsx \
   table_pve.txt.gz
 
 
-## 1. assign genes by mediation analysis
-table_mwas_significant.xlsx: make.mwas-genes.R
+## 1. Take significant CpGs
+table_mwas.txt.gz: make.table-significant.R table_mwas.ft
 	Rscript --vanilla $<
 
-table_mwas.txt.gz: table_mwas_significant.xlsx
-table_mwas_significant_gene.txt.gz: table_mwas_significant.xlsx
-table_mwas_significant.txt.gz: table_mwas_significant.xlsx
-
+table_mwas_significant.txt.gz: table_mwas.txt.gz
 
 ## 2. more extensively assign nearest CpGs to codig genes
 nearest.genes.gz: temp/coding.genes.bed.gz
