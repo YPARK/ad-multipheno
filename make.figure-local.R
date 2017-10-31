@@ -63,49 +63,85 @@ pheno.names <- c('NP', 'NFT', 'Cog')
 pheno.colors <- c('#FFAA00','#AA55FF','#00DD99')
 pheno.shapes <- c(21,22,25)
 
-tab.to.show <- read_tsv('table_pve_mult_top.txt.gz')
+tab.to.show <- rbind(read_tsv('table_pve_mult_top.txt.gz') %>% select(cg),
+                     read_tsv('table_pve_top.txt.gz') %>% select(cg)) %>%
+    unique()
+
 cg.to.show <- tab.to.show$cg
 
-.cg <- cg.to.show[2]
-.loc <- mwas.tab %>% filter(cg == .cg) %>% select(chr, cg.loc) %>% unique()
-.chr <- .loc$chr
-lb <- .loc$cg.loc - 5e5
-ub <- .loc$cg.loc + 5e5
+plot.local <- function(.cg) {
 
-.neigh.tab <- full.tab %>%
-    filter(chr == .chr, cg.loc > lb, cg.loc < ub) %>%
-    filter(variable %in% pheno.names) %>%
-    mutate(p.val.trunc = pmin(pmax(-log10(p.val), 0), 10)) %>%
-    mutate(z.trunc = pmin(pmax(theta/theta.se, -3), 3)) %>%
-    mutate(pip = 1/(1+exp(-lodds)))
+    .loc <- mwas.tab %>% filter(cg == .cg) %>% select(chr, cg.loc) %>% unique()
+    .chr <- .loc$chr
+    lb <- .loc$cg.loc - 5e4
+    ub <- .loc$cg.loc + 5e4
 
-.neigh.tab$variable <- factor(.neigh.tab$variable, pheno.names)
-.neigh.tab$p.val.trunc[is.na(.neigh.tab$p.val.trunc)] <- 1
+    .neigh.genes <- genes.tab %>% filter(cg == .cg) %>%
+        select(hgnc, tss, tes, strand) %>% unique() %>%
+            arrange(tss)
 
-.neigh.genes <- genes.tab %>% filter(cg %in% unique(.neigh.tab$cg)) %>%
-    select(hgnc, tss, tes, strand) %>% unique() %>%
-    arrange(tss)
+    lb <- min(lb, min(.neigh.genes$tss))
+    ub <- max(ub, min(.neigh.genes$tes))
 
-#y=(theta - boot.theta)/boot.theta.se,
-
-.aes <- aes(x = cg.loc, y = pve, shape = variable, fill = z.trunc, size = p.val.trunc)
-.aes.lab <- aes(x = cg.loc, y = pve, label = cg)
-
-##            size = 1/(1+exp(-(lodds - boot.lodds))))
-
-## .neig %>% filter(p.val.trunc > log.cutoff)
-
-.neigh.tab.lab <- .neigh.tab %>% na.omit() %>%
-    filter(p.val.trunc > log.cutoff, pve > 1e-2)
-
-gg.plot() +
-    geom_point(data = .neigh.tab, .aes) +
-    geom_text_repel(data = .neigh.tab.lab, .aes.lab) +
-    scale_color_manual(values = pheno.colors) +
-    scale_shape_manual(values = pheno.shapes) +
-    scale_fill_gradientn(colors = c('blue', 'gray', 'yellow')) +
-    scale_size_continuous(breaks=c(0, 1, 3, signif(log.cutoff, 2), 10, 20), range = c(0.5, 2)) +
-    facet_grid(variable ~ ., scales='free') +
-    xlim(lb, ub)
+    .neigh.tab <- full.tab %>%
+        filter(chr == .chr, cg.loc > lb, cg.loc < ub) %>%
+            filter(variable %in% pheno.names) %>%
+                mutate(p.val.trunc = pmin(pmax(-log10(p.val), 0), 10)) %>%
+                    mutate(z.trunc = pmin(pmax(theta/theta.se, -3), 3)) %>%
+                        mutate(pip = 1/(1+exp(-lodds)))
 
 
+    .neigh.tab$variable <- factor(.neigh.tab$variable, pheno.names)
+    .neigh.tab$p.val.trunc[is.na(.neigh.tab$p.val.trunc)] <- 1
+
+
+    .aes <- aes(x = cg.loc, y = pve, shape = variable, fill = z.trunc, size = p.val.trunc)
+    .aes.lab <- aes(x = cg.loc, y = pve, label = cg)
+
+    .neigh.tab.lab <- .neigh.tab %>% na.omit() %>%
+        filter(p.val.trunc > log.cutoff, pve > .05 | cg == .cg)
+
+    plt <- gg.plot() +
+        geom_vline(xintercept = .loc$cg.loc, lty = 2, color = 'gray') + 
+        geom_point(data = .neigh.tab, .aes) +
+            geom_text_repel(data = .neigh.tab.lab, .aes.lab, nudge_y=.01, show.legend = FALSE, size = 3)
+
+    .genes.pos <- .neigh.genes %>% filter(strand == '+')
+    .genes.neg <- .neigh.genes %>% filter(strand == '-')
+
+    if(nrow(.genes.pos) > 0) {
+        plt <- plt + 
+            geom_segment(data = .genes.pos, aes(x = tss, xend = tes, y = -.01, yend = -.01), size = 1,
+                         arrow=arrow(), color = 'orange')
+    }
+
+    if(nrow(.genes.neg) > 0) {
+        plt <- plt + 
+            geom_segment(data = .genes.neg, aes(xend = tss, x = tes, y = -.01, yend = -.01), size = 1,
+                         arrow=arrow(), color = 'orange')
+    }
+
+    plt <- plt +
+        geom_text_repel(data = .neigh.genes, aes(x = (tss+tes)/2, y = -.02, label = hgnc),
+                        nudge_y = -.01, size = 3)
+
+    p.tick <- c(0, 1, 3, signif(log.cutoff, 2), 10)
+
+    plt <-
+        plt +
+            scale_color_manual(values = pheno.colors) +
+                scale_shape_manual(values = pheno.shapes) +
+                    scale_fill_gradientn('effect', colors = c('blue', 'gray', 'yellow')) +
+                        scale_size_continuous('-log10 P', breaks=p.tick, range = c(0, 3)) +
+                            facet_grid(variable ~ ., scales='free') + xlab('chr' %&&% .chr) +
+                                xlim(lb, ub) + ylab('proportion of variance explained (DNAme)')
+
+    return(plt)
+}
+
+dir.create('figure-local')
+
+for(.cg in cg.to.show) {
+    plt <- plot.local(.cg)
+    ggsave(filename = 'figure-local/fig_' %&&% .cg %&&% '.pdf', plot = plt, width = 6, height=8)
+}
