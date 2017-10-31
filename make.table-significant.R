@@ -8,13 +8,16 @@ options(stringsAsFactors = FALSE)
 
 mwas.tab <- read_feather('table_mwas.ft')
 
-mwas.boot.tab <- mwas.tab %>% na.omit() %>%
-    mutate(p.val = pnorm((lodds -boot.lodds)/boot.lodds.se, lower.tail = FALSE))
+mwas.boot.tab <- mwas.tab %>%
+    mutate(p.val = pnorm((lodds -boot.lodds)/boot.lodds.se, lower.tail = FALSE)) %>%
+    mutate(p.val.2 = 2*pnorm(abs(theta -boot.theta)/boot.theta.se, lower.tail = FALSE)) %>%
+    mutate(p.val = pmax(p.val, p.val.2)) %>%
+    select(-p.val.2)
 
 n.tot <- mwas.tab %>% filter(pheno == 'NP') %>% nrow()
 
 cutoff <- 0.05 / n.tot / 3
-significant <- mwas.boot.tab %>% filter(p.val < cutoff, lodds > 0) %>% select(cg) %>% unique()
+significant <- mwas.boot.tab %>% filter(p.val < cutoff) %>% select(cg) %>% unique()
 mwas.sig <- mwas.boot.tab %>% filter(cg %in% significant$cg)
 
 ## output to feather for visualization
@@ -24,5 +27,5 @@ mwas.sig <- mwas.boot.tab %>% filter(cg %in% significant$cg)
 }
 
 pheno.names <- c('NP', 'NFT', 'Cog')
-.write.tab(mwas.tab %>% filter(pheno %in% pheno.names), path = gzfile('table_mwas.txt.gz'))
+.write.tab(mwas.boot.tab %>% filter(pheno %in% pheno.names), path = gzfile('table_mwas.txt.gz'))
 .write.tab(mwas.sig, path = gzfile('table_mwas_significant.txt.gz'))

@@ -1,9 +1,8 @@
 all: table_mwas.txt.gz \
-  nearest.genes.gz \
   table_replication_formatted.xlsx \
-  table_replication_pve.xlsx \
-  table_pve.txt.gz
-
+  nearest.genes.gz \
+  table_pve.txt.gz \
+  table_pathways.md
 
 ## 1. Take significant CpGs
 table_mwas.txt.gz: make.table-significant.R table_mwas.ft
@@ -22,22 +21,16 @@ temp/coding.genes.bed.gz: coding.genes.txt.gz
 
 ## 3. take nicely replicated CpGs
 table_replication.txt.gz: table_replication_formatted.xlsx
-table_top_cpgs.md: table_replication_formatted.xlsx
+table_top_replication_cpgs.md: table_replication_formatted.xlsx
 table_replication.xlsx: table_replication_formatted.xlsx
 figure-replication/fig_dejager.pdf: table_replication_formatted.xlsx
 table_replication_formatted.xlsx: make.table-replication.R table_mwas.txt.gz nearest.genes.gz dejager.cpgs.txt
 	Rscript --vanilla $<
 
-
 ## 4. Proportion of variance explained
-figure-replication/fig_replication_pve_stat_heatmap.pdf: table_replication_pve.xlsx
-figure-replication/fig_replication_pve_stat_tot.pdf: table_replication_pve.xlsx
-table_replication_pve.txt.gz: table_replication_pve.xlsx
-table_replication_pve.xlsx: make.table-replication-pve.R table_replication.txt.gz
-	Rscript --vanilla $<
-
 fig_pve_stat_tot.pdf: table_pve.txt.gz
 fig_pve_stat_heatmap.pdf: table_pve.txt.gz
+table_pve_tot.txt.gz: table_pve.txt.gz
 table_pve.txt.gz: make.table-pve.R table_mwas_significant.txt.gz
 	Rscript --vanilla $<
 

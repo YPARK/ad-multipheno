@@ -76,7 +76,7 @@ tab.ret <- pandoc.table.return(small.out.tab, caption = 'Top CpGs',
                                style = 'simple', digits = 2,
                                split.tables = 200)
 
-cat(tab.ret, file = 'table_top_cpgs.md')
+cat(tab.ret, file = 'table_top_replication_cpgs.md')
 
 write.xlsx(np.out, file = 'table_replication.xlsx', sheetName = 'NP', append = FALSE, row.names = FALSE)
 write.xlsx(nft.out, file = 'table_replication.xlsx', sheetName = 'NFT', append = TRUE, row.names = FALSE)

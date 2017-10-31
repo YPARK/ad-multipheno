@@ -10,12 +10,12 @@ load('summary-G.rdata')
 var.names <- read_tsv('phenotype.names.txt', col_names = 'var')
 var.names <- var.names$var
 
-colnames(gauss.var.decomp) <- c('cg', 'chr', 'cg.loc',
-                                'var.obs', 'total',
-                                var.names,
-                                'genetic', 'MF')
+colnames(gauss.var.decomp) <- c('cg', 'chr', 'cg.loc', 'var.obs', 'total',
+                                var.names, 'genetic', 'MF')
+                                
+pve.tab.tot <- gauss.var.decomp
 
-pve.stat.tot <- gauss.var.decomp %>%
+pve.stat.tot <- pve.tab.tot %>%
     gather(variable, pve, c(var.names, 'genetic')) %>%
     group_by(variable) %>%
     summarize(pve.mean = mean(pve),
@@ -24,6 +24,29 @@ pve.stat.tot <- gauss.var.decomp %>%
 
 mwas.sig <- read_tsv('table_mwas_significant.txt.gz')
 
+################################################################
+gene.cols <- c('cg', 'chr', 'cg.loc', 'ensg', 'hgnc', 'tss', 'tes', 'strand', 'dist')
+genes.tab <- read_tsv('nearest.genes.gz', col_names = gene.cols)
+
+mwas.compact <- mwas.sig %>% rename(variable=pheno) %>%
+    select(cg, variable, theta, theta.se, lodds) %>%
+    mutate(theta = signif(theta, 2), theta.se = signif(theta.se, 2),
+           pip = signif(1/(1+exp(-lodds)), 2))
+
+mwas.compact.formatted <- mwas.compact %>%
+    mutate(stat = theta %&&% ' (' %&&% signif(theta.se, 1) %&&% ', ' %&&% signif(pip, 1) %&&% ')') %>%
+    select(-theta, -theta.se, -pip, -lodds) %>%
+    filter(variable %in% c('NP', 'NFT', 'Cog')) %>%
+    mutate(variable = variable %&&% '_effect')
+
+mwas.compact.formatted$variable <- factor(mwas.compact.formatted$variable,
+                                          var.names %&&% '_effect')
+
+mwas.compact.tab <- mwas.compact.formatted %>%
+    spread(key = variable, value = stat, fill = '.')
+
+
+################################################################
 n.tot <- 413223
 cutoff <- 0.05 / n.tot / 3
 
@@ -80,9 +103,54 @@ plt.pve.stat <-
 ggsave(filename = 'fig_pve_stat_tot.pdf', plot = plt.pve.stat, width = 8, height = 5)
 
 ################################################################
-## show double phenotype stuff
-pve.tab$variable <- factor(pve.tab$variable, rev(c(var.names, 'genetic')))
+## show top PVE results among MWAS CpGs
+pve.tab$variable <- factor(pve.tab$variable, c(var.names, 'genetic'))
 
+pve.tab.labeled <- pve.tab %>%
+    left_join(genes.tab) %>%
+    na.omit() %>%
+    rename(gene = hgnc) %>%
+    filter(dist < 1e4) %>%
+    select(cg, chr, cg.loc, gene, pheno, variable, pve) %>%
+    group_by(cg, chr, cg.loc, pheno, variable) %>%
+    summarize(pve = signif(mean(pve), 2), gene = paste(gene, collapse = '|')) %>%
+    mutate(pve = signif(pve, 2)) %>%
+    spread(key = variable, value = pve)
+
+pve.tab.top <- pve.tab.labeled %>%
+    mutate(AD = NP + NFT + Cog) %>% arrange(desc(AD)) %>% head(30) %>%
+    arrange(pheno, chr, cg.loc) %>% as.data.frame() %>%
+    rename(location = cg.loc) %>%
+    mutate(location = format(location, big.mark = ',')) %>%
+    select(-NeuN, -PMI, -genetic, -AD) %>%
+    left_join(mwas.compact.tab) %>% 
+    as.data.frame()
+
+pve.tab.sorted <- pve.tab.labeled %>%
+    mutate(AD = NP + NFT + Cog) %>%
+    arrange(desc(AD), pheno, chr, cg.loc) %>%
+    filter(AD > 1e-2) %>% as.data.frame() %>%
+    rename(location = cg.loc) %>%
+    mutate(location = format(location, big.mark = ',')) %>%
+    select(-NeuN, -PMI, -genetic, -AD) %>%
+    left_join(mwas.compact.tab) %>% 
+    as.data.frame()
+
+## tables with 30 highest PVE genes
+tab.ret <- pandoc.table.return(pve.tab.top,
+                               caption = 'Top PVE CpGs associated with AD phenotypes',
+                               style = 'simple', digits = 2,
+                               split.tables = 200)
+
+cat(tab.ret, file = 'table_pve_top_cpgs.md')
+
+write_tsv(pve.tab.top, path = gzfile('table_pve_top.txt.gz'))
+write_tsv(pve.tab.sorted, path = gzfile('table_pve_sorted.txt.gz'))
+write.xlsx(pve.tab.top, file = 'table_pve.xlsx', sheetName = 'Top 30', row.names = FALSE)
+## write.xlsx(pve.tab, file = 'table_pve.xlsx', sheetName = 'All significant', row.names = FALSE, append = TRUE)
+
+################################################################
+## show double phenotype stuff
 pve.tab$pheno <- factor(pve.tab$pheno,
                         c('NP', 'NFT', 'Cog', 'NP+NFT', 'NP+Cog', 'NFT+Cog', 'NP+NFT+Cog'))
 
@@ -95,10 +163,13 @@ cg.list <- temp$cg
 cg.order <- row.order(temp %>% select(-cg) %>% as.matrix())
 cg.ordered <- cg.list[cg.order]
 
-pve.tab.mult$cg <- factor(pve.tab.mult$cg, cg.ordered)
+.df <- pve.tab.mult
+
+.df$cg <- factor(pve.tab.mult$cg, cg.ordered)
+.df$variable <- factor(.df$variable, rev(c(var.names, 'genetic')))
 
 plt.pve.heatmap <-
-    gg.plot(pve.tab.mult, aes(x = cg, y = variable, fill = pve)) +
+    gg.plot(.df, aes(x = cg, y = variable, fill = pve)) +
     geom_tile() + xlab('CpGs') +
     facet_grid(. ~ pheno, scales = 'free', space = 'free') +
     scale_fill_gradientn('PVE',
@@ -114,34 +185,15 @@ ggsave(filename = 'fig_pve_stat_heatmap.pdf', plot = plt.pve.heatmap, width = 8,
 
 ################################################################
 ## make tables for top doubly-associated CpGs
-
-gene.cols <- c('cg', 'chr', 'cg.loc', 'ensg', 'hgnc', 'tss', 'tes', 'strand', 'dist')
-genes.tab <- read_tsv('nearest.genes.gz', col_names = gene.cols)
 pve.tab.mult$cg <- as.character(pve.tab.mult$cg)
 pve.tab.mult$variable <- factor(pve.tab.mult$variable, c(var.names, 'genetic'))
-
-mwas.compact <- mwas.sig %>% rename(variable=pheno) %>%
-    select(cg, variable, theta, theta.se, lodds) %>%
-    mutate(theta = signif(theta, 2), theta.se = signif(theta.se, 2),
-           pip = signif(1/(1+exp(-lodds)), 2))
-
-mwas.compact.formatted <- mwas.compact %>%
-    mutate(stat = theta %&&% ' (' %&&% signif(theta.se, 1) %&&% ', ' %&&% signif(pip, 1) %&&% ')') %>%
-    select(-theta, -theta.se, -pip, -lodds) %>%
-    mutate(variable = variable %&&% '_effect')
-
-mwas.compact.formatted$variable <- factor(mwas.compact.formatted$variable,
-                                          c('NP', 'NFT', 'Cog') %&&% '_effect')
-
-mwas.compact.tab <- mwas.compact.formatted %>%
-    spread(key = variable, value = stat, fill = '.')
 
 pve.mult.genes <- 
     pve.tab.mult %>%
     left_join(genes.tab, by = 'cg') %>%
     na.omit() %>%
     rename(gene = hgnc) %>%
-    filter(dist < 1) %>%
+    filter(dist < 1e4) %>%
     select(cg, chr, cg.loc, gene, pheno, variable, pve) %>%
     group_by(cg, chr, cg.loc, pheno, variable) %>%
     summarize(pve = signif(mean(pve), 2), gene = paste(gene, collapse = '|')) %>%
@@ -176,8 +228,8 @@ mult.tab.out.top <-
 
 
 mult.tab.out <- 
-    pve.mult.genes %>% mutate(AD = NP + NFT + Cog) %>% arrange(desc(AD)) %>%
-    arrange(pheno, chr, cg.loc) %>% as.data.frame() %>%
+    pve.mult.genes %>% mutate(AD = NP + NFT + Cog) %>%
+    arrange(desc(AD), pheno, chr, cg.loc) %>% as.data.frame() %>%
     rename(location = cg.loc) %>%
     mutate(location = format(location, big.mark = ',')) %>%
     select(-NeuN, -PMI, -genetic, -AD) %>% 
@@ -187,7 +239,7 @@ mult.tab.out <-
 
 ## tables with 30 highest PVE genes
 tab.ret <- pandoc.table.return(mult.tab.out.top,
-                               caption = 'Top CpGs associated with multiple phenotypes',
+                               caption = 'Top PVE CpGs associated with multiple phenotypes',
                                style = 'simple', digits = 2,
                                split.tables = 200)
 
@@ -201,4 +253,5 @@ write_tsv(mult.tab.out, path = gzfile('table_pve_mult.txt.gz'))
 write.xlsx(mult.tab.out.top, file = 'table_pve_mult.xlsx', sheetName = 'Top 30', row.names = FALSE)
 write.xlsx(mult.tab.out, file = 'table_pve_mult.xlsx', sheetName = 'All significant', row.names = FALSE, append = TRUE)
 
+write_tsv(pve.tab.tot, path = gzfile('table_pve_tot.txt.gz'))
 write_tsv(pve.tab, path = gzfile('table_pve.txt.gz'))
