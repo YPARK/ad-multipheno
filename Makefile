@@ -4,11 +4,17 @@ all: table_mwas.txt.gz \
   table_pve.txt.gz \
   table_pathways.md
 
-## 1. Take significant CpGs
+## 1. Take significant CpGs while converting large rdata to easily
+## loadable feather format
 table_mwas.txt.gz: make.table-significant.R table_mwas.ft
 	Rscript --vanilla $<
 
 table_mwas_significant.txt.gz: table_mwas.txt.gz
+
+table_mwas.ft: make.feather.R
+	Rscript --vanilla $<
+
+table_bootstrap.ft: table_mwas.ft
 
 ## 2. more extensively assign nearest CpGs to codig genes
 nearest.genes.gz: temp/coding.genes.bed.gz
@@ -17,7 +23,6 @@ nearest.genes.gz: temp/coding.genes.bed.gz
 temp/coding.genes.bed.gz: coding.genes.txt.gz
 	[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	cat $< | gzip -d | awk -F'\t' '{ print $$1 FS $$2 FS $$3 FS $$5 FS $$4 FS $$6 }' | sort -k1,1 -k2,2n | gzip > $@
-
 
 ## 3. take nicely replicated CpGs
 table_replication.txt.gz: table_replication_formatted.xlsx
@@ -34,20 +39,4 @@ table_pve_tot.txt.gz: table_pve.txt.gz
 table_pve.txt.gz: make.table-pve.R table_mwas_significant.txt.gz
 	Rscript --vanilla $<
 
-## 5. pathway analysis
-full-REACTOME_NP.txt.gz: full-REACTOME_Cog.txt.gz
-full-REACTOME_NFT.txt.gz: full-REACTOME_Cog.txt.gz
-full-REACTOME_Cog.txt.gz: make.pathway.R
-	Rscript --vanilla $<
 
-fig_pathway_genes.pdf: table_pathways.md
-table_pathways.md: make.table-pathway.R
-	Rscript --vanilla $<
-
-
-
-## convert large rdata to easily loadable feather format
-table_mwas.ft: make.feather.R
-	Rscript --vanilla $<
-
-table_bootstrap.ft: table_mwas.ft
